@@ -1,0 +1,111 @@
+<Window x:Class="AudioRecorder.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Multi-Source Audio Recorder" Height="500" Width="700"
+        ResizeMode="CanResize" WindowStartupLocation="CenterScreen">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Title -->
+        <TextBlock Grid.Row="0" Text="Multi-Source Audio Recorder" 
+                   FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+
+        <!-- Recording Controls -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,15">
+            <Button Name="StartRecordingButton" Content="Start Recording" Width="120" Height="35" 
+                    Background="#4CAF50" Foreground="White" FontWeight="Bold" Margin="5" Click="StartRecording_Click"/>
+            <Button Name="StopRecordingButton" Content="Stop Recording" Width="120" Height="35" 
+                    Background="#f44336" Foreground="White" FontWeight="Bold" Margin="5" IsEnabled="False" Click="StopRecording_Click"/>
+            <Button Name="PauseResumeButton" Content="Pause" Width="120" Height="35" 
+                    Background="#FF9800" Foreground="White" FontWeight="Bold" Margin="5" IsEnabled="False" Click="PauseResume_Click"/>
+        </StackPanel>
+
+        <!-- Audio Devices List -->
+        <GroupBox Grid.Row="2" Header="Available Audio Devices" Margin="0,0,0,15">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5">
+                    <Button Name="RefreshSourcesButton" Content="Refresh Devices" 
+                            Width="120" Height="25" Margin="0,0,10,0" Click="RefreshSources_Click"/>
+                    <CheckBox Name="ShowInputDevicesCheckBox" Content="Input Devices" IsChecked="True" 
+                              VerticalAlignment="Center" Margin="0,0,15,0" Checked="DeviceFilter_Changed" Unchecked="DeviceFilter_Changed"/>
+                    <CheckBox Name="ShowOutputDevicesCheckBox" Content="Output Devices" IsChecked="True" 
+                              VerticalAlignment="Center" Checked="DeviceFilter_Changed" Unchecked="DeviceFilter_Changed"/>
+                </StackPanel>
+                
+                <ListView Grid.Row="1" Name="AudioSourcesList" Margin="5" SelectionMode="Multiple">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Device Name" Width="220" DisplayMemberBinding="{Binding DeviceName}"/>
+                            <GridViewColumn Header="Type" Width="60" DisplayMemberBinding="{Binding DeviceTypeDisplay}"/>
+                            <GridViewColumn Header="Channels" Width="70" DisplayMemberBinding="{Binding Channels}"/>
+                            <GridViewColumn Header="Sample Rate" Width="90" DisplayMemberBinding="{Binding SampleRate}"/>
+                            <GridViewColumn Header="Status" Width="90" DisplayMemberBinding="{Binding Status}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+
+                <TextBlock Grid.Row="2" Text="Select multiple devices by holding Ctrl and clicking. Input devices capture audio, Output devices record system playback." 
+                           FontStyle="Italic" Margin="5" Foreground="Gray" TextWrapping="Wrap"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- Output Settings -->
+        <GroupBox Grid.Row="3" Header="Output Settings" Margin="0,0,0,15">
+            <StackPanel Margin="5">
+                <StackPanel Orientation="Horizontal" Margin="0,5">
+                    <TextBlock Text="Output Directory:" Width="120" VerticalAlignment="Center"/>
+                    <TextBox Name="OutputDirectoryTextBox" Width="400" Height="25" VerticalAlignment="Center" Margin="5,0"/>
+                    <Button Name="BrowseDirectoryButton" Content="Browse" Width="80" Height="25" 
+                            Margin="5,0" Click="BrowseDirectory_Click"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,5">
+                    <TextBlock Text="File Format:" Width="120" VerticalAlignment="Center"/>
+                    <ComboBox Name="FileFormatComboBox" Width="150" Height="25" VerticalAlignment="Center" Margin="5,0">
+                        <ComboBoxItem Content="WAV" IsSelected="True"/>
+                        <ComboBoxItem Content="MP3"/>
+                    </ComboBox>
+                    <TextBlock Text="Quality:" Width="60" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                    <ComboBox Name="QualityComboBox" Width="100" Height="25" VerticalAlignment="Center" Margin="5,0">
+                        <ComboBoxItem Content="44.1 kHz" IsSelected="True"/>
+                        <ComboBoxItem Content="48 kHz"/>
+                        <ComboBoxItem Content="96 kHz"/>
+                    </ComboBox>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,5">
+                    <CheckBox Name="SynchronizedRecordingCheckBox" Content="Synchronized Recording (combine multiple devices into single file)" 
+                              IsChecked="True" VerticalAlignment="Center" Margin="5,0"/>
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Status Bar -->
+        <StatusBar Grid.Row="4" Height="25">
+            <StatusBarItem>
+                <TextBlock Name="StatusTextBlock" Text="Ready to record"/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Name="RecordingTimeTextBlock" Text="00:00:00" Margin="0,0,10,0"/>
+                    <Ellipse Name="RecordingIndicator" Width="10" Height="10" Fill="Gray"/>
+                </StackPanel>
+            </StatusBarItem>
+        </StatusBar>
+
+        <!-- Recording Progress -->
+        <ProgressBar Grid.Row="5" Name="RecordingProgressBar" Height="20" Margin="0,5,0,0" 
+                     Visibility="Collapsed" IsIndeterminate="True"/>
+    </Grid>
+</Window>

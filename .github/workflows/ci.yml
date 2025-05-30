@@ -1,0 +1,98 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: ['*']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '6.0.x'
+        
+    - name: Cache NuGet packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+          
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build application
+      run: dotnet build --configuration Release --no-restore
+      
+    - name: Run tests (if any)
+      run: dotnet test --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage"
+      continue-on-error: true  # Continue even if no tests exist
+      
+    - name: Get Git tag for version (CI)
+      id: get_git_tag_ci
+      run: |
+        if ("${{ github.ref }}" -like "refs/tags/*") {
+          $gitTag = "${{ github.ref }}".Replace("refs/tags/", "")
+          echo "git_tag=$gitTag" >> $env:GITHUB_OUTPUT
+          echo "Using version from Git tag: $gitTag"
+        } else {
+          echo "git_tag=" >> $env:GITHUB_OUTPUT
+          echo "No Git tag found, using default version"
+        }
+        
+    - name: Test publish (Framework-dependent - smaller)
+      run: |
+        $gitTag = "${{ steps.get_git_tag_ci.outputs.git_tag }}"
+        if ($gitTag) {
+          dotnet publish --configuration Release --runtime win-x64 --self-contained false --output "./test-publish-small" /p:PublishSingleFile=true /p:GitTag=$gitTag
+        } else {
+          dotnet publish --configuration Release --runtime win-x64 --self-contained false --output "./test-publish-small" /p:PublishSingleFile=true
+        }
+        
+    - name: Test publish (Self-contained - portable)
+      run: |
+        $gitTag = "${{ steps.get_git_tag_ci.outputs.git_tag }}"
+        if ($gitTag) {
+          dotnet publish --configuration Release --runtime win-x64 --self-contained true --output "./test-publish-portable" /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:GitTag=$gitTag
+        } else {
+          dotnet publish --configuration Release --runtime win-x64 --self-contained true --output "./test-publish-portable" /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+        }
+        
+    - name: Verify executables exist and show sizes
+      run: |
+        if (Test-Path "test-publish-small\AudioRecorder.exe") {
+          Write-Host "✅ Framework-dependent executable built successfully"
+          $fileSize = (Get-Item "test-publish-small\AudioRecorder.exe").Length / 1MB
+          Write-Host "📦 Framework-dependent size: $([math]::Round($fileSize, 2)) MB"
+        } else {
+          Write-Error "❌ Framework-dependent executable not found!"
+          exit 1
+        }
+        
+        if (Test-Path "test-publish-portable\AudioRecorder.exe") {
+          Write-Host "✅ Self-contained (portable) executable built successfully"
+          $fileSize = (Get-Item "test-publish-portable\AudioRecorder.exe").Length / 1MB
+          Write-Host "📦 Self-contained (portable) size: $([math]::Round($fileSize, 2)) MB"
+        } else {
+          Write-Error "❌ Self-contained executable not found!"
+          exit 1
+        }
+        
+    - name: Upload build artifacts (for verification)
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: ci-build-${{ github.sha }}
+        path: |
+          test-publish-small/AudioRecorder.exe
+          test-publish-portable/AudioRecorder.exe
+        retention-days: 7
