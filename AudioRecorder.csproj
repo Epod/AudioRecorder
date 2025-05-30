@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net6.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <PublishSingleFile>true</PublishSingleFile>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyTitle>Multi-Source Audio Recorder</AssemblyTitle>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- Version will be set dynamically from Git tags or default to 1.0.0 -->
+    <Version Condition="'$(GitTag)' != ''">$(GitTag.TrimStart('v'))</Version>
+    <Version Condition="'$(GitTag)' == ''">1.0.0</Version>
+    <AssemblyVersion>$(Version).0</AssemblyVersion>
+    <FileVersion>$(Version).0</FileVersion>
+    <AssemblyInformationalVersion>$(Version)</AssemblyInformationalVersion>
+  </PropertyGroup>
+  
+  <!-- Framework-dependent build settings -->
+  <PropertyGroup Condition="'$(SelfContained)' != 'true'">
+    <SelfContained>false</SelfContained>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <PublishTrimmed>false</PublishTrimmed>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  
+  <!-- Self-contained build settings (more conservative for WPF) -->
+  <PropertyGroup Condition="'$(SelfContained)' == 'true'">
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <PublishTrimmed>false</PublishTrimmed>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <DebuggerSupport>true</DebuggerSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Lame" Version="2.1.0" />
+  </ItemGroup>
+
+</Project>

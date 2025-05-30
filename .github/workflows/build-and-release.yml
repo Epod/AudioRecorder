@@ -1,0 +1,212 @@
+name: Build and Release Audio Recorder
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0
+  workflow_dispatch:  # Allows manual trigger
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '6.0.x'
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build application
+      run: dotnet build --configuration Release --no-restore
+      
+    - name: Run tests (if any)
+      run: dotnet test --configuration Release --no-build --verbosity normal
+      continue-on-error: true  # Continue even if no tests exist
+      
+    - name: Get Git tag for version
+      id: get_git_tag
+      run: |
+        if ("${{ github.ref }}" -like "refs/tags/*") {
+          $gitTag = "${{ github.ref }}".Replace("refs/tags/", "")
+          echo "git_tag=$gitTag" >> $env:GITHUB_OUTPUT
+          echo "Using version from Git tag: $gitTag"
+        } else {
+          echo "git_tag=" >> $env:GITHUB_OUTPUT
+          echo "No Git tag found, using default version"
+        }
+        
+    - name: Publish Framework-dependent (smaller) executable
+      run: |
+        $gitTag = "${{ steps.get_git_tag.outputs.git_tag }}"
+        if ($gitTag) {
+          dotnet publish --configuration Release --runtime win-x64 --self-contained false --output "./release-small" /p:PublishSingleFile=true /p:GitTag=$gitTag
+        } else {
+          dotnet publish --configuration Release --runtime win-x64 --self-contained false --output "./release-small" /p:PublishSingleFile=true
+        }
+        
+    - name: Publish Self-contained (portable) executable
+      run: |
+        $gitTag = "${{ steps.get_git_tag.outputs.git_tag }}"
+        if ($gitTag) {
+          dotnet publish --configuration Release --runtime win-x64 --self-contained true --output "./release-portable" /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:GitTag=$gitTag
+        } else {
+          dotnet publish --configuration Release --runtime win-x64 --self-contained true --output "./release-portable" /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+        }
+        
+    - name: Sign executables
+      uses: dlemstra/code-sign-action@v1
+      with:
+        certificate: "${{ secrets.EPOD_CODESIGN_PFXBUNDLE_B64 }}"
+        password: "${{ secrets.EPOD_CODESIGN_PASS }}"
+        folder: "release-small"
+        recursive: true
+        
+    - name: Sign portable executable
+      uses: dlemstra/code-sign-action@v1
+      with:
+        certificate: "${{ secrets.EPOD_CODESIGN_PFXBUNDLE_B64 }}"
+        password: "${{ secrets.EPOD_CODESIGN_PASS }}"
+        folder: "release-portable"
+        recursive: true
+        
+    - name: Create release packages
+      run: |
+        # Create small package (framework-dependent)
+        mkdir release-package-small
+        copy "release-small\AudioRecorder.exe" "release-package-small\"
+        copy "README.md" "release-package-small\"
+        echo "Multi-Source Audio Recorder - Framework-Dependent (Small Size)" > "release-package-small\RELEASE_NOTES.txt"
+        echo "" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "This package contains:" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "- AudioRecorder.exe (Main application - requires .NET 6 runtime)" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "- README.md (Usage instructions and documentation)" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "System Requirements:" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "- Windows 10 or later (64-bit)" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "- .NET 6 Desktop Runtime (download from https://dotnet.microsoft.com/download/dotnet/6.0)" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "- Audio input devices (microphones, headsets, etc.)" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "- No admin rights required" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "" >> "release-package-small\RELEASE_NOTES.txt"
+        echo "Simply double-click AudioRecorder.exe to run!" >> "release-package-small\RELEASE_NOTES.txt"
+        
+        # Create portable package (self-contained)
+        mkdir release-package-portable
+        copy "release-portable\AudioRecorder.exe" "release-package-portable\"
+        copy "README.md" "release-package-portable\"
+        echo "Multi-Source Audio Recorder - Portable (Self-Contained)" > "release-package-portable\RELEASE_NOTES.txt"
+        echo "" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "This package contains:" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "- AudioRecorder.exe (Main application - no .NET installation required)" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "- README.md (Usage instructions and documentation)" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "System Requirements:" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "- Windows 10 or later (64-bit)" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "- Audio input devices (microphones, headsets, etc.)" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "- No admin rights required" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "- No .NET installation required (all dependencies included)" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "" >> "release-package-portable\RELEASE_NOTES.txt"
+        echo "Simply double-click AudioRecorder.exe to run!" >> "release-package-portable\RELEASE_NOTES.txt"
+        
+    - name: Create ZIP archives
+      run: |
+        Compress-Archive -Path "release-package-small\*" -DestinationPath "AudioRecorder-Small-Windows-x64.zip"
+        Compress-Archive -Path "release-package-portable\*" -DestinationPath "AudioRecorder-Portable-Windows-x64.zip"
+        
+    - name: Get version from tag
+      id: get_version
+      run: |
+        if ("${{ github.ref }}" -like "refs/tags/*") {
+          $version = "${{ github.ref }}".Replace("refs/tags/", "")
+        } else {
+          $version = "latest"
+        }
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        
+    - name: Get previous release tag
+      id: get_previous_tag
+      run: |
+        git fetch --tags
+        $currentTag = "${{ steps.get_version.outputs.version }}"
+        $allTags = git tag --sort=-version:refname | Where-Object { $_ -ne $currentTag -and $_ -match '^v\d+\.\d+' }
+        if ($allTags -and $allTags.Count -gt 0) {
+          $previousTag = $allTags[0]
+          echo "previous_tag=$previousTag" >> $env:GITHUB_OUTPUT
+          echo "has_previous=true" >> $env:GITHUB_OUTPUT
+          echo "Found previous tag: $previousTag"
+        } else {
+          echo "previous_tag=" >> $env:GITHUB_OUTPUT
+          echo "has_previous=false" >> $env:GITHUB_OUTPUT
+          echo "No previous tags found"
+        }
+        
+    - name: Generate release notes from commits
+      id: generate_notes
+      run: |
+        $currentTag = "${{ steps.get_version.outputs.version }}"
+        $previousTag = "${{ steps.get_previous_tag.outputs.previous_tag }}"
+        $hasPrevious = "${{ steps.get_previous_tag.outputs.has_previous }}"
+        
+        if ($hasPrevious -eq "true" -and $previousTag) {
+          # Get commits between previous tag and current tag
+          echo "Getting commits between $previousTag and $currentTag"
+          $commits = git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" "$previousTag..$currentTag" 2>$null
+          if (-not $commits) {
+            echo "No commits found with range, trying alternative method"
+            $commits = git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --reverse
+          }
+          if ($commits) {
+            $releaseNotes = "## What's Changed`n`n$($commits -join "`n")`n`n**Full Changelog**: https://github.com/${{ github.repository }}/compare/$previousTag...$currentTag"
+          } else {
+            $releaseNotes = "## What's Changed`n`nNo commits found between $previousTag and $currentTag`n`n**Full Changelog**: https://github.com/${{ github.repository }}/compare/$previousTag...$currentTag"
+          }
+        } else {
+          # First release - get all commits
+          $commits = git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --reverse
+          if ($commits) {
+            $releaseNotes = "## What's Changed`n`nInitial release with the following commits:`n`n$($commits -join "`n")"
+          } else {
+            $releaseNotes = "## What's Changed`n`nInitial release of Audio Recorder"
+          }
+        }
+        
+        # Save release notes to file to handle multiline content
+        $releaseNotes | Out-File -FilePath "release_notes.md" -Encoding UTF8
+        echo "notes_file=release_notes.md" >> $env:GITHUB_OUTPUT
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: AudioRecorder-${{ steps.get_version.outputs.version }}
+        path: |
+          AudioRecorder-Small-Windows-x64.zip
+          AudioRecorder-Portable-Windows-x64.zip
+          release-package-small/
+          release-package-portable/
+        retention-days: 30
+        
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          AudioRecorder-Small-Windows-x64.zip
+          AudioRecorder-Portable-Windows-x64.zip
+        name: Audio Recorder ${{ steps.get_version.outputs.version }}
+        body_path: ${{ steps.generate_notes.outputs.notes_file }}
+        draft: false
+        prerelease: false
+        generate_release_notes: false
+        fail_on_unmatched_files: true
+        token: ${{ secrets.GITHUB_TOKEN }}
